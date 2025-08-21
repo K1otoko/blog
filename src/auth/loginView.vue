@@ -32,17 +32,12 @@
                   </el-form-item>
                 </div>
               </el-tab-pane>
-              <el-tab-pane label="验证码登录" name="phone">
+              <el-tab-pane disabled label="验证码登录" name="phone">
                 <el-form-item prop="phoneEmail">
                   <el-input v-model="form.phoneEmail" placeholder="手机号/邮箱" />
                 </el-form-item>
                 <el-form-item prop="code">
-                  <el-input
-                    v-model="form.code"
-                    placeholder="验证码"
-                    type="password"
-                    show-password
-                  />
+                  <el-input v-model="form.code" placeholder="验证码" />
                 </el-form-item>
               </el-tab-pane>
             </el-tabs>
@@ -68,9 +63,11 @@
   </div>
 </template>
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-// import * as phoneEmailRegex from '@/utils/index'
+import { phoneEmailRegex, codeRegex } from '@/utils/index'
+import { useLoginStore } from '@/stores'
+import { storeToRefs } from 'pinia'
 
 interface RuleForm {
   username: string
@@ -79,6 +76,7 @@ interface RuleForm {
   code: string
 }
 const ruleFormRef = ref<FormInstance>()
+const loginStore = useLoginStore()
 
 const activeName = ref('username')
 const loading = ref(false)
@@ -89,33 +87,56 @@ const form = reactive<RuleForm>({
   phoneEmail: '',
   code: '',
 })
-const requiredRule: boolean = activeName.value ?? activeName.value === 'username' ? true : false
-const rules = reactive<FormRules<RuleForm>>({
-  username: [{ required: requiredRule, message: '请输入手机号/邮箱/用户名', trigger: 'blur' }],
-  password: [{ required: requiredRule, message: '请输入密码', trigger: 'blur' }],
-  phoneEmail: [
-    { required: requiredRule, message: '请输入手机号/邮箱', trigger: 'blur' },
+
+const rulesUsername: FormRules<RuleForm> = {
+  username: [
     {
-      // pattern: phoneEmailRegex,
-      message: '请输入正确的手机号',
+      required: activeName.value === 'username',
+      message: '请输入手机号/邮箱/用户名',
       trigger: 'blur',
     },
   ],
-  code: [{ required: requiredRule, message: '请输入验证码', trigger: 'blur' }],
+  password: [{ required: activeName.value === 'username', message: '请输入密码', trigger: 'blur' }],
+}
+const rulePhone: FormRules<RuleForm> = {
+  phoneEmail: [
+    { required: true, message: '请输入手机号/邮箱', trigger: 'blur' },
+    {
+      pattern: phoneEmailRegex,
+      message: '请输入正确的手机号/邮箱',
+      trigger: 'blur',
+    },
+  ],
+  code: [
+    { required: true, message: '请输入验证码', trigger: 'blur' },
+
+    {
+      pattern: codeRegex,
+      message: '请输入正确的验证码',
+      trigger: 'blur',
+    },
+  ],
+}
+const rules = computed(() => {
+  return activeName.value === 'username' ? rulesUsername : rulePhone
 })
 
 const handleClick = () => {
-  console.log(activeName.value)
-  //切换登录方式重置表单
   ruleFormRef.value?.resetFields()
 }
 //提交
 const onsubmitForm = async (formEl: FormInstance | undefined) => {
-  console.log(loading.value, form, ruleFormRef)
   if (!formEl) return
   await formEl.validate((valid, fields) => {
     if (valid) {
       console.log('submit!', form)
+      loginStore.login({
+        username: form.username,
+        password: form.password,
+        phoneEmail: form.phoneEmail,
+        code: form.code,
+        method: activeName.value,
+      })
     } else {
       console.log('error submit!', fields)
     }

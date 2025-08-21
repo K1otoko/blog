@@ -1,5 +1,5 @@
-import { createPinia, defineStore, StoreDefinition, Store } from 'pinia'
-import { toRaw, Ref } from 'vue'
+import { createPinia, defineStore, type StoreDefinition, type Store } from 'pinia'
+import { toRaw, type Ref } from 'vue'
 
 // 创建 Pinia 实例
 const pinia = createPinia()
@@ -175,4 +175,4 @@ Object.keys(modules).forEach((path) => {
 })
 
 export default pinia
-export const { useCounterStore, useUserStore } = stores // 根据实际模块名导出
+export const { useLoginStore } = stores // 根据实际模块名导出
