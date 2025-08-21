@@ -1,11 +1,21 @@
-<script setup lang="ts"></script>
 
-<template>
-  <h1>You did it!</h1>
-  <p>
-    Visit <a href="https://vuejs.org/" target="_blank" rel="noopener">vuejs.org</a> to read the
-    documentation
-  </p>
-</template>
 
-<style scoped></style>
+<template><RouterView /></template>
+<script setup lang="ts">
+</script>
+<style>
+* {
+  margin: 0;
+  padding: 0;
+}
+a {
+  text-decoration: none;
+  color: inherit;
+}
+html,
+body,
+#app {
+  height: 100%;
+  width: 100%;
+}
+</style>
