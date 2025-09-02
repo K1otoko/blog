@@ -1,9 +1,10 @@
-import Service from '@/api/login'
-import type { LoginParams } from '@/types/login.d'
-import Cookies from 'js-cookie'
+import Service from '@/api/user'
+import type { User } from '@/types/user.d'
+
 // 定义状态类型
 export interface CounterState {
   //
+  userList: User[]
 }
 
 // 定义 getters 类型
@@ -14,14 +15,14 @@ interface CounterGetters {
 
 // 定义 actions 类型
 interface CounterActions {
-  login: (params: LoginParams) => void
+  getUserList: (this: CounterState) => Promise<void>
 }
 
 export default {
   // 状态
   state: (): CounterState => ({
     //
-    userInfo: {},
+    userList: [],
   }),
 
   // 计算属性
@@ -29,10 +30,9 @@ export default {
 
   // 方法
   actions: {
-    async login(params) {
-      const data = await Service.login(params)
-      Cookies.set('accessToken', data.data)
-      return data.code
+    async getUserList() {
+      const res = await Service.getUserList()
+      this.userList = res.data
     },
   } as CounterActions,
 

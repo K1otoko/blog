@@ -67,7 +67,8 @@ import { ref, reactive, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 import { phoneEmailRegex, codeRegex } from '@/utils/index'
 import { useLoginStore } from '@/stores'
-import { storeToRefs } from 'pinia'
+
+import router from '@/router'
 
 interface RuleForm {
   username: string
@@ -127,16 +128,21 @@ const handleClick = () => {
 //提交
 const onsubmitForm = async (formEl: FormInstance | undefined) => {
   if (!formEl) return
-  await formEl.validate((valid, fields) => {
+  await formEl.validate(async (valid, fields) => {
     if (valid) {
       console.log('submit!', form)
-      loginStore.login({
+      const code = await loginStore.login({
         username: form.username,
         password: form.password,
         phoneEmail: form.phoneEmail,
         code: form.code,
         method: activeName.value,
       })
+      console.log(code)
+
+      if (code === 0) {
+        router.push('admin/home')
+      }
     } else {
       console.log('error submit!', fields)
     }

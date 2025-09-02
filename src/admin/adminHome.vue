@@ -2,10 +2,10 @@
   <div class="adminHome">
     <el-container class="container">
       <el-aside width="200px">
-        <el-menu router="true" default-active="1" class="menu">
-          <el-menu-item index="1" route="/admin/home">首页</el-menu-item>
-          <el-menu-item index="2" route="/admin/article">文章管理</el-menu-item>
-          <el-menu-item index="3" route="/admin/user">用户管理</el-menu-item>
+        <el-menu router="true" :default-active="route.path" class="menu">
+          <el-menu-item index="/admin/home" route="/admin/home">首页</el-menu-item>
+          <el-menu-item index="/admin/article" route="/admin/article">文章管理</el-menu-item>
+          <el-menu-item index="/admin/user" route="/admin/user">用户管理</el-menu-item>
         </el-menu>
       </el-aside>
       <el-container>
@@ -17,6 +17,8 @@
 </template>
 <script setup lang="ts">
 import HeaderView from './component/headerView.vue'
+import { useRoute } from 'vue-router'
+const route = useRoute()
 </script>
 <style scoped lang="scss">
 .menu .is-active {

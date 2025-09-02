@@ -1,178 +1,183 @@
-import { createPinia, defineStore, type StoreDefinition, type Store } from 'pinia'
-import { toRaw, type Ref } from 'vue'
+import { createPinia, defineStore, type Store, type StoreDefinition } from 'pinia'
+import { toRaw } from 'vue'
+import type { ThisType } from 'typescript'
 
-// 创建 Pinia 实例
-const pinia = createPinia()
+// 创建Pinia实例
+export const pinia = createPinia()
 
 // 持久化配置类型
-interface PersistOptions {
+export interface PersistConfig {
   key?: string
   paths?: string[]
+  storage?: Storage
 }
 
-// 基础 Store 配置类型
-interface BaseStoreOptions<S, G, A> {
-  state: () => S
-  getters?: G
-  actions?: A
-  persist?: boolean | PersistOptions
+// 基础Store选项类型
+export interface BaseStoreOptions<State extends object, Getters = {}, Actions = {}> {
+  state: () => State
+  getters?: Getters
+  actions?: Actions
+  persist?: boolean | PersistConfig
+}
+
+// 扩展的Getters类型
+type ExtendedGetters<Getters, State> = Getters & {
+  getRawState: () => State
+}
+
+type BaseActions<State, Getters, Actions> = Actions & {
+  resetState: () => void
+  updateState: (partial: Partial<State> | ((state: State) => void)) => void
+}
+type ExtendedActions<State, Getters, Actions> = BaseActions<State, Getters, Actions> &
+  ThisType<State & ExtendedGetters<Getters, State> & BaseActions<State, Getters, Actions>>
+// 关键修复：正确声明泛型参数的ExtendedActions
+// type ExtendedActions<State, Getters, Actions> = Actions & {
+//   resetState: () => void
+//   updateState: (partial: Partial<State> | ((state: State) => void)) => void
+// } & ThisType<State & ExtendedGetters<Getters, State> & ExtendedActions<State, Getters, Actions>>
+
+// 工具函数：处理嵌套属性
+function getNestedProp(obj: Record<string, any>, path: string): any {
+  return path.split('.').reduce((acc, key) => acc?.[key], obj)
+}
+
+function setNestedProp(obj: Record<string, any>, path: string, value: any): void {
+  const keys = path.split('.')
+  const lastKey = keys.pop()!
+  const target = keys.reduce((acc, key) => (acc[key] ??= {}), obj)
+  target[lastKey] = value
 }
 
 // 持久化插件
-const persistencePlugin = <S>(options: PersistOptions = {}) => {
-  return (store: Store<string, S>) => {
-    const { key = store.$id, paths } = options
+function createPersistPlugin<State extends object>(config: PersistConfig = {}) {
+  return (store: Store<string, State>) => {
+    const { key = store.$id, paths, storage = localStorage } = config
 
-    // 从本地存储加载数据
-    const loadData = () => {
-      const data = localStorage.getItem(key)
-      if (data) {
+    const loadFromStorage = () => {
+      const stored = storage.getItem(key)
+      if (stored) {
         try {
-          const parsed = JSON.parse(data) as Partial<S>
-          store.$patch(parsed)
+          const parsed = JSON.parse(stored) as Record<string, any>
+          const stateToPatch: Partial<State> = {}
+          paths?.length
+            ? paths.forEach((path) =>
+                setNestedProp(
+                  stateToPatch as Record<string, any>,
+                  path,
+                  getNestedProp(parsed, path),
+                ),
+              )
+            : Object.assign(stateToPatch, parsed)
+          store.$patch(stateToPatch)
         } catch (e) {
-          console.error('Failed to parse stored data', e)
+          console.error(`[Pinia Persist] 加载失败:`, e)
         }
       }
     }
 
-    // 初始化加载
-    loadData()
+    const saveToStorage = () => {
+      const rawState = toRaw(store.$state)
+      const dataToSave: Record<string, any> = {}
+      paths?.length
+        ? paths.forEach((path) =>
+            setNestedProp(dataToSave, path, getNestedProp(rawState as Record<string, any>, path)),
+          )
+        : Object.assign(dataToSave, rawState)
+      storage.setItem(key, JSON.stringify(dataToSave))
+    }
 
-    // 监听状态变化并保存
-    store.$subscribe((_mutation, state) => {
-      let saveData = toRaw(state)
-      // 如果指定了路径，只保存指定字段
-      if (paths && paths.length) {
-        saveData = paths.reduce((obj, path) => {
-          const value = (saveData as Record<string, unknown>)[path]
-          if (value !== undefined) {
-            ;(obj as Record<string, unknown>)[path] = value
-          }
-          return obj
-        }, {} as Partial<S>)
-      }
-      localStorage.setItem(key, JSON.stringify(saveData))
-    })
+    loadFromStorage()
+    store.$subscribe(saveToStorage)
   }
 }
 
-// 基础 Store 类
-export class BaseStore<
-  S extends object,
-  G extends Record<string, (...args: any[]) => any> = {},
-  A extends Record<string, (...args: any[]) => any> = {},
-> {
-  private id: string
-  private options: BaseStoreOptions<S, G, A>
-  private store: Store<
+// 基础Store类
+export class BaseStore<State extends object, Getters = {}, Actions = {}> {
+  private readonly id: string
+  private readonly options: BaseStoreOptions<State, Getters, Actions>
+  private instance: Store<
     string,
-    S,
-    G,
-    A & { resetState: () => void; updateState: (data: Partial<S>) => void }
+    State,
+    ExtendedGetters<Getters, State>,
+    ExtendedActions<State, Getters, Actions>
   > | null = null
 
-  constructor(id: string, options: BaseStoreOptions<S, G, A>) {
+  constructor(id: string, options: BaseStoreOptions<State, Getters, Actions>) {
     this.id = id
     this.options = options
   }
 
-  // 定义 Store
-  define(): Store<
+  private createDefinition(): StoreDefinition<
     string,
-    S,
-    G,
-    A & { resetState: () => void; updateState: (data: Partial<S>) => void }
+    State,
+    ExtendedGetters<Getters, State>,
+    ExtendedActions<State, Getters, Actions>
   > {
     const { state, getters, actions, persist = false } = this.options
     const plugins: any[] = []
 
-    // 如果需要持久化，添加持久化插件
     if (persist) {
-      const persistOptions = persist === true ? {} : persist
-      plugins.push(persistencePlugin<S>(persistOptions))
+      plugins.push(createPersistPlugin<State>(persist === true ? {} : persist))
     }
 
-    // 添加开发环境日志插件
     if (import.meta.env.DEV) {
-      plugins.push((store: Store<string, S>) => {
+      plugins.push((store: Store<string, State>) => {
         store.$subscribe((mutation, state) => {
-          console.log(`[Pinia] ${this.id} 状态变化:`, {
-            mutation,
-            state: toRaw(state),
-          })
+          console.log(`[Pinia] ${this.id} 变更:`, { mutation, state: toRaw(state) })
         })
       })
     }
 
-    // 创建 Store
-    const storeDefinition: StoreDefinition<
-      string,
-      S,
-      G & { getState: () => S },
-      A & { resetState: () => void; updateState: (data: Partial<S>) => void }
-    > = defineStore(this.id, {
+    return defineStore(this.id, {
       state,
       getters: {
         ...getters,
-        // 通用 getter：获取整个状态
-        getState(): S {
+        getRawState() {
           return toRaw(this.$state)
         },
-      },
+      } as ExtendedGetters<Getters, State>,
       actions: {
         ...actions,
-        // 通用 action：重置状态
         resetState() {
           this.$reset()
         },
-        // 通用 action：批量更新
-        updateState(data: Partial<S>) {
-          this.$patch(data)
+        updateState(partial) {
+          this.$patch(partial)
         },
-      },
+      } as ExtendedActions<State, Getters, Actions>,
       plugins,
     })
-
-    this.store = storeDefinition()
-    return this.store
   }
 
-  // 获取 Store 实例
   getInstance(): Store<
     string,
-    S,
-    G,
-    A & { resetState: () => void; updateState: (data: Partial<S>) => void }
+    State,
+    ExtendedGetters<Getters, State>,
+    ExtendedActions<State, Getters, Actions>
   > {
-    if (!this.store) {
-      return this.define()
+    if (!this.instance) {
+      this.instance = this.createDefinition()(pinia)
     }
-    return this.store
+    return this.instance
   }
 }
 
-// 自动注册所有 Store
-const modules = import.meta.glob('./modules/*.ts', { eager: true })
-type StoreExports = Record<string, () => Store<any, any, any, any>>
+// 自动注册模块
+const modules = import.meta.glob<{ default: BaseStoreOptions<any, any, any> }>('./modules/*.ts', {
+  eager: true,
+})
+type Stores = Record<string, () => Store<any, any, any, any>>
+const stores: Stores = {}
 
-const stores: StoreExports = {}
-
-Object.keys(modules).forEach((path) => {
-  const module = modules[path] as { default: BaseStoreOptions<any, any, any> }
+for (const [path, module] of Object.entries(modules)) {
   const match = path.match(/\.\/modules\/(.*)\.ts/)
-
   if (match && module.default) {
     const moduleName = match[1]
     const storeKey =
-      `use${moduleName.charAt(0).toUpperCase() + moduleName.slice(1)}Store` as keyof StoreExports
-    const storeInstance = new BaseStore(moduleName, module.default)
-
-    stores[storeKey] = () => {
-      return storeInstance.getInstance()
-    }
+      `use${moduleName.charAt(0).toUpperCase() + moduleName.slice(1)}Store` as keyof Stores
+    stores[storeKey] = () => new BaseStore(moduleName, module.default).getInstance()
   }
-})
+}
 
-export default pinia
-export const { useLoginStore } = stores // 根据实际模块名导出
+export const { useUserStore, useLoginStore } = stores
