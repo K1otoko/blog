@@ -23,8 +23,20 @@ const routes: RouteRecordRaw[] = [
         component: () => import(/* webpackChunkName: "home' */ '@/admin/pages/articleView.vue'),
       },
       {
+        path: 'category', //分类管理
+        component: () => import(/* webpackChunkName: "home' */ '@/admin/pages/categoryView.vue'),
+      },
+      {
         path: 'user',
         component: () => import(/* webpackChunkName: "home' */ '@/admin/pages/userView.vue'),
+      },
+      {
+        path: 'comment',
+        component: () => import(/* webpackChunkName: "home' */ '@/admin/pages/commentView.vue'),
+      },
+      {
+        path: 'setting',
+        component: () => import(/* webpackChunkName: "home' */ '@/admin/pages/settingView.vue'),
       },
     ],
   },
